@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Tabungan Siswa - MIS. Wadil Qura</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel untuk JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Quicksand:wght@500;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-kids {
+      font-family: 'Quicksand', sans-serif;
+    }
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      .print-area {
+        background-color: white !important;
+        color: black !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        width: 100% !important;
+      }
+      body {
+        background: white !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+  <div id="root"></div>
+
+  <!-- KOD UTAMA REACT (JSX) -->
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // === DATA AWAL SISWA & SALDO AWAL (Konteks MIS) ===
+    const INITIAL_STUDENTS = [
+      { id: "S001", nama: "Ahmad Rizki", kelas: "Kelas 1", baki: 250000 },
+      { id: "S002", nama: "Siti Nurhaliza", kelas: "Kelas 2", baki: 450000 },
+      { id: "S003", nama: "Budi Santoso", kelas: "Kelas 3", baki: 150000 },
+      { id: "S004", nama: "Aisyah Putri", kelas: "Kelas 4", baki: 600000 },
+      { id: "S005", nama: "Zayyan Akhdan", kelas: "Kelas 5", baki: 80000 },
+      { id: "S006", nama: "Khadijah Nabila", kelas: "Kelas 6", baki: 120000 }
+    ];
+
+    // === DATA AWAL SEJARAH TRANSAKSI TABUNGAN ===
+    const INITIAL_TRANSACTIONS = [
+      { id: "T001", studentId: "S001", tarikh: "2026-07-01", jenis: "Setoran", jumlah: 200000, nota: "Tabungan awal tahun ajaran" },
+      { id: "T002", studentId: "S002", tarikh: "2026-07-01", jenis: "Setoran", jumlah: 500000, nota: "Tabungan bulanan Julai" },
+      { id: "T003", studentId: "S003", tarikh: "2026-07-02", jenis: "Setoran", jumlah: 150000, nota: "Setoran mingguan" },
+      { id: "T004", studentId: "S004", tarikh: "2026-07-02", jenis: "Setoran", jumlah: 600000, nota: "Titipan orang tua" },
+      { id: "T005", studentId: "S002", tarikh: "2026-07-03", jenis: "Penarikan", jumlah: 50000, nota: "Beli buku tulis" },
+      { id: "T006", studentId: "S001", tarikh: "2026-07-03", jenis: "Setoran", jumlah: 50000, nota: "Uang saku lebih" },
+      { id: "T007", studentId: "S005", tarikh: "2026-07-03", jenis: "Setoran", jumlah: 100000, nota: "Setoran pertama" },
+      { id: "T008", studentId: "S005", tarikh: "2026-07-04", jenis: "Penarikan", jumlah: 20000, nota: "Keperluan alat tulis" },
+      { id: "T009", studentId: "S006", tarikh: "2026-07-04", jenis: "Setoran", jumlah: 120000, nota: "Simpanan awal" }
+    ];
+
+    function App() {
+      // --- STATE UTAMA ---
+      const [students, setStudents] = useState(INITIAL_STUDENTS);
+      const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
+      const [currentTab, setCurrentTab] = useState('dashboard'); // 'dashboard' | 'siswa' | 'transaksi' | 'riwayat' | 'buku-tabungan'
+      const [selectedStudent, setSelectedStudent] = useState(INITIAL_STUDENTS[0]);
+      
+      const [searchQuery, setSearchQuery] = useState('');
+      const [filterKelas, setFilterKelompok] = useState('Semua');
+      const [alertMsg, setAlertMsg] = useState(null);
+
+      // --- STATE FORM INPUTAN ---
+      const [newStudent, setNewStudent] = useState({ nama: "", kelas: "Kelas 1" });
+      const [transactionForm, setTransactionForm] = useState({
+        studentId: "S001",
+        jenis: "Setoran",
+        jumlah: "",
+        nota: "Setoran tabungan"
+      });
+
+      // --- TOAST NOTIFIKASI ---
+      const triggerAlert = (msg) => {
+        setAlertMsg(msg);
+        setTimeout(() => setAlertMsg(null), 3500);
+      };
+
+      // --- FORMAT MATA WANG RUPIAH INDONESIA (Rp) ---
+      const formatRupiah = (angka) => {
+        return new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0
+        }).format(angka);
+      };
+
+      // --- AKSI TAMBAH SISWA ---
+      const handleAddStudent = (e) => {
+        e.preventDefault();
+        if (!newStudent.nama) {
+          alert("Silakan masukkan nama siswa!");
+          return;
+        }
+        const studentId = `S${String(students.length + 1).padStart(3, '0')}`;
+        const record = {
+          id: studentId,
+          nama: newStudent.nama,
+          kelas: newStudent.kelas,
+          baki: 0
+        };
+        setStudents(prev => [...prev, record]);
+        setNewStudent({ nama: "", kelas: "Kelas 1" });
+        triggerAlert("Siswa baru berhasil didaftarkan ke pangkalan data tabungan!");
+      };
+
+      // --- AKSI PADAM SISWA ---
+      const handleDeleteStudent = (id) => {
+        if (confirm("Apakah Anda yakin ingin menghapus data siswa ini? Semua histori transaksi siswa ini juga akan dihapus.")) {
+          setStudents(prev => prev.filter(s => s.id !== id));
+          setTransactions(prev => prev.filter(t => t.studentId !== id));
+          triggerAlert("Data siswa dan transaksi terkait berhasil dihapus.");
+        }
+      };
+
+      // --- AKSI REKOD TRANSAKSI BARU ---
+      const handleAddTransaction = (e) => {
+        e.preventDefault();
+        const amount = parseFloat(transactionForm.jumlah);
+        if (!amount || amount <= 0) {
+          alert("Silakan masukkan jumlah uang yang valid!");
+          return;
+        }
+
+        const targetStudent = students.find(s => s.id === transactionForm.studentId);
+        if (!targetStudent) {
+          alert("Siswa tidak ditemukan!");
+          return;
+        }
+
+        // Semakan had pengeluaran baki wang
+        if (transactionForm.jenis === "Penarikan" && targetStudent.baki < amount) {
+          alert(`Saldo tabungan tidak mencukupi! Saldo saat ini ${targetStudent.nama} adalah ${formatRupiah(targetStudent.baki)}`);
+          return;
+        }
+
+        // Simpan transaksi baharu
+        const transId = `T${String(transactions.length + 1).padStart(3, '0')}`;
+        const newTrans = {
+          id: transId,
+          studentId: transactionForm.studentId,
+          tarikh: new Date().toISOString().split('T')[0],
+          jenis: transactionForm.jenis,
+          jumlah: amount,
+          nota: transactionForm.nota || (transactionForm.jenis === "Setoran" ? "Setoran tabungan" : "Penarikan tabungan")
+        };
+
+        // Kemaskini baki murid
+        setStudents(prev => prev.map(s => {
+          if (s.id === transactionForm.studentId) {
+            const bakiBaru = transactionForm.jenis === "Setoran" ? s.baki + amount : s.baki - amount;
+            return { ...s, baki: bakiBaru };
+          }
+          return s;
+        }));
+
+        setTransactions(prev => [newTrans, ...prev]);
+        setTransactionForm(prev => ({ ...prev, jumlah: "", nota: transactionForm.jenis === "Setoran" ? "Setoran tabungan" : "Penarikan tabungan" }));
+        triggerAlert(`Transaksi ${transactionForm.jenis} sebesar ${formatRupiah(amount)} berhasil direkam!`);
+      };
+
+      // --- HITUNG STATISTIK KESELURUHAN ---
+      const totalTabungan = students.reduce((sum, s) => sum + s.baki, 0);
+      const totalSetoran = transactions.filter(t => t.jenis === "Setoran").reduce((sum, t) => sum + t.jumlah, 0);
+      const totalPenarikan = transactions.filter(t => t.jenis === "Penarikan").reduce((sum, t) => sum + t.jumlah, 0);
+      const penyimpanAktif = students.filter(s => s.baki > 0).length;
+
+      // --- EKSPORT SEJARAH TRANSAKSI KE CSV ---
+      const handleExportCSV = () => {
+        const headers = ["ID_TRANSAKSI", "ID_SISWA", "NAMA_SISWA", "KELAS", "TANGGAL", "JENIS", "JUMLAH", "CATATAN"];
+        const rows = transactions.map(t => {
+          const s = students.find(stud => stud.id === t.studentId) || {};
+          return [
+            t.id,
+            t.studentId,
+            s.nama || "Siswa Dihapus",
+            s.kelas || "-",
+            t.tarikh,
+            t.jenis,
+            t.jumlah,
+            t.nota
+          ];
+        });
+
+        let csvContent = "data:text/csv;charset=utf-8," 
+          + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Data_Tabungan_MIS_Wadil_Qura_${new Date().getFullYear()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        triggerAlert("File CSV data tabungan berhasil diunduh!");
+      };
+
+      // --- SARINGAN SENARAI MURID ---
+      const filteredStudents = students.filter(s => {
+        const matchesSearch = s.nama.toLowerCase().includes(searchQuery.toLowerCase()) || s.id.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesKelas = filterKelas === 'Semua' || s.kelas === filterKelas;
+        return matchesSearch && matchesKelas;
+      });
+
+      return (
+        <div className="min-h-screen flex flex-col justify-between">
+          
+          {/* HEADER NAVIGASI PORTAL (no-print) */}
+          <header className="bg-emerald-800 text-white shadow-md py-4 px-6 no-print">
+            <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+              <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setCurrentTab('dashboard')}>
+                <div className="bg-white p-2.5 rounded-2xl text-emerald-800 shadow-md">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-wide font-kids">Sistem Tabungan Siswa</h1>
+                  <p className="text-xs text-emerald-100 font-medium">MIS. Wadil Qura • Pengelolaan Keuangan Digital</p>
+                </div>
+              </div>
+
+              <nav className="flex flex-wrap items-center justify-center gap-2">
+                <button 
+                  onClick={() => setCurrentTab('dashboard')} 
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${currentTab === 'dashboard' ? 'bg-emerald-950 text-white' : 'hover:bg-emerald-700'}`}
+                >
+                  Dashboard
+                </button>
+                <button 
+                  onClick={() => setCurrentTab('siswa')} 
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${currentTab === 'siswa' ? 'bg-emerald-950 text-white' : 'hover:bg-emerald-700'}`}
+                >
+                  Daftar Siswa
+                </button>
+                <button 
+                  onClick={() => setCurrentTab('transaksi')} 
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${currentTab === 'transaksi' ? 'bg-emerald-950 text-white' : 'hover:bg-emerald-700'}`}
+                >
+                  Rekam Transaksi
+                </button>
+                <button 
+                  onClick={() => setCurrentTab('riwayat')} 
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${currentTab === 'riwayat' ? 'bg-emerald-950 text-white' : 'hover:bg-emerald-700'}`}
+                >
+                  Riwayat & Laporan
+                </button>
+                <button 
+                  onClick={() => { setCurrentTab('buku-tabungan'); if (students.length > 0 && !selectedStudent) setSelectedStudent(students[0]); }} 
+                  className={`px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-900 transition-all`}
+                >
+                  📖 Buku Tabungan
+                </button>
+              </nav>
+            </div>
+          </header>
+
+          {/* NOTIFIKASI TOAST (no-print) */}
+          {alertMsg && (
+            <div className="fixed top-5 right-5 z-50 bg-emerald-700 text-white px-5 py-3 rounded-xl shadow-2xl font-semibold text-sm animate-bounce no-print">
+              ✓ {alertMsg}
+            </div>
+          )}
+
+          {/* KANDUNGAN UTAMA PORTAL */}
+          <main className="flex-grow max-w-7xl mx-auto px-4 py-8 w-full print-area">
+            
+            {/* ================= TAB 1: DASHBOARD ================= */}
+            {currentTab === 'dashboard' && (
+              <div className="space-y-8 no-print animate-fade-in-up">
+                
+                {/* Banner Aluan */}
+                <div className="bg-gradient-to-br from-emerald-800 to-teal-700 text-white rounded-3xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="space-y-3">
+                    <span className="bg-emerald-900 bg-opacity-50 text-emerald-200 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase">Tahun Pelajaran 2026/2027</span>
+                    <h2 className="text-2xl md:text-3xl font-extrabold font-kids">Kelola Keuangan & Tabungan Siswa Lebih Rapih!</h2>
+                    <p className="text-emerald-100 text-sm max-w-2xl">
+                      Pantau dan kelola dana tabungan harian anak didik dengan transparan. Bantu kembangkan budaya menabung di kalangan siswa MIS Wadil Qura sejak dini. Semua transaksi terekam secara real-time dan siap dicetak ke dalam format buku tabungan.
+                    </p>
+                  </div>
+                  <div className="bg-white bg-opacity-10 p-5 rounded-2xl border border-white border-opacity-10 text-center w-full md:w-auto">
+                    <div className="text-xl font-bold font-kids text-yellow-300">MIS-WQ</div>
+                    <p className="text-[10px] text-emerald-200 uppercase font-bold tracking-wider mt-1">Sistem Terpadu</p>
+                  </div>
+                </div>
+
+                {/* Ringkasan Statistik Tabungan */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Dana Tabungan</span>
+                      <span className="text-xl font-black text-emerald-950 font-kids">{formatRupiah(totalTabungan)}</span>
+                    </div>
+                    <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-lg">💰</div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Setoran</span>
+                      <span className="text-xl font-black text-blue-900 font-kids">{formatRupiah(totalSetoran)}</span>
+                    </div>
+                    <div className="p-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-lg">📈</div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Penarikan</span>
+                      <span className="text-xl font-black text-pink-900 font-kids">{formatRupiah(totalPenarikan)}</span>
+                    </div>
+                    <div className="p-3 bg-pink-50 text-pink-700 rounded-xl font-bold text-lg">📉</div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Penyimpan Aktif</span>
+                      <span className="text-xl font-black text-amber-600 font-kids">{penyimpanAktif} / {students.length} Anak</span>
+                    </div>
+                    <div className="p-3 bg-amber-50 text-amber-600 rounded-xl font-bold text-lg">👥</div>
+                  </div>
+                </div>
+
+                {/* Seksyen Pintasan Pantas */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                    <h3 className="font-extrabold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+                      <span>🚀</span> Jalan Pintas Manajemen
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <button onClick={() => setCurrentTab('transaksi')} className="p-4 bg-emerald-50 hover:bg-emerald-100 rounded-2xl text-left border border-emerald-100 transition-all space-y-1">
+                        <span className="text-xl block">📥</span>
+                        <strong className="text-xs text-emerald-950 block">Setor / Tarik Tabungan</strong>
+                        <span className="text-[10px] text-emerald-700 block">Update data simpanan siswa.</span>
+                      </button>
+                      <button onClick={() => setCurrentTab('siswa')} className="p-4 bg-teal-50 hover:bg-teal-100 rounded-2xl text-left border border-teal-100 transition-all space-y-1">
+                        <span className="text-xl block">👥</span>
+                        <strong className="text-xs text-teal-950 block">Kelola Daftar Siswa</strong>
+                        <span className="text-[10px] text-teal-700 block">Tambah/Edit data siswa aktif.</span>
+                      </button>
+                      <button onClick={() => setCurrentTab('riwayat')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-2xl text-left border border-purple-100 transition-all space-y-1">
+                        <span className="text-xl block">📋</span>
+                        <strong className="text-xs text-purple-950 block">Laporan & Ekspor CSV</strong>
+                        <span className="text-[10px] text-purple-700 block">Lihat log audit & unduh file.</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Kempen Menabung RA */}
+                  <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-3 text-xs leading-relaxed text-slate-600">
+                    <h4 className="font-bold text-slate-800 uppercase tracking-wider text-emerald-800">💡 Edukasi Literasi Finansial</h4>
+                    <p>
+                      Program tabungan ini bertujuan mendidik siswa MIS Wadil Qura untuk menyisihkan sebagian uang saku mereka, melatih kesabaran, kedisiplinan, dan persiapan menyambut kegiatan akhir tahun madrasah.
+                    </p>
+                    <div className="p-3 bg-amber-50 text-amber-900 rounded-xl border border-amber-100 font-semibold">
+                      "Menabung pangkal kaya, berhemat adalah tuntunan mulia."
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ================= TAB 2: DAFTAR MURID ================= */}
+            {currentTab === 'siswa' && (
+              <div className="space-y-6 no-print">
+                
+                {/* Form Pendaftaran Siswa */}
+                <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                  <h3 className="font-extrabold text-slate-900 text-sm border-b pb-2">Daftar Siswa Penyimpan Baru</h3>
+                  <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end text-xs">
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-600">Nama Lengkap Siswa</label>
+                      <input 
+                        type="text" 
+                        placeholder="Masukkan nama lengkap siswa..." 
+                        value={newStudent.nama}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, nama: e.target.value }))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-600">Kelas</label>
+                      <select 
+                        value={newStudent.kelas}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, kelas: e.target.value }))}
+                        className="w-full px-3 py-2.5 border rounded-xl bg-white"
+                      >
+                        <option value="Kelas 1">Kelas 1</option>
+                        <option value="Kelas 2">Kelas 2</option>
+                        <option value="Kelas 3">Kelas 3</option>
+                        <option value="Kelas 4">Kelas 4</option>
+                        <option value="Kelas 5">Kelas 5</option>
+                        <option value="Kelas 6">Kelas 6</option>
+                      </select>
+                    </div>
+                    <button type="submit" className="bg-emerald-700 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold">
+                      Daftar Siswa ✓
+                    </button>
+                  </form>
+                </div>
+
+                {/* Saringan Tampilan Kelas */}
+                <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl border gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Saring Kelas:</span>
+                    <select 
+                      value={filterKelas}
+                      onChange={(e) => setFilterKelompok(e.target.value)}
+                      className="px-3 py-1.5 border rounded-lg text-xs font-bold bg-slate-50 outline-none"
+                    >
+                      <option value="Semua">Semua Kelas</option>
+                      <option value="Kelas 1">Kelas 1</option>
+                      <option value="Kelas 2">Kelas 2</option>
+                      <option value="Kelas 3">Kelas 3</option>
+                      <option value="Kelas 4">Kelas 4</option>
+                      <option value="Kelas 5">Kelas 5</option>
+                      <option value="Kelas 6">Kelas 6</option>
+                    </select>
+                  </div>
+                  <div className="w-full sm:w-auto">
+                     <input 
+                      type="text" 
+                      placeholder="Cari Siswa..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 outline-none text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Senarai Daftar Murid & Saldo */}
+                <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+                  <div className="p-6 border-b flex justify-between items-center">
+                    <div>
+                      <h4 className="font-extrabold text-slate-900 text-sm">Buku Register & Saldo Tabungan Siswa</h4>
+                      <p className="text-[10px] text-slate-400">MIS. Wadil Qura • Daftar Saldo Terkini</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto text-xs">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-bold text-[10px] uppercase border-b">
+                          <th className="p-4">ID Siswa</th>
+                          <th className="p-4">Nama Lengkap</th>
+                          <th className="p-4">Kelas</th>
+                          <th className="p-4">Saldo Tabungan</th>
+                          <th className="p-4 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredStudents.length > 0 ? filteredStudents.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50/50">
+                            <td className="p-4 font-mono font-bold text-emerald-800">{s.id}</td>
+                            <td className="p-4 font-bold text-slate-950">{s.nama}</td>
+                            <td className="p-4 text-slate-600">
+                              <span className="px-2 py-1 bg-slate-100 rounded-md text-[10px] font-semibold">{s.kelas}</span>
+                            </td>
+                            <td className="p-4 font-bold text-emerald-700">{formatRupiah(s.baki)}</td>
+                            <td className="p-4 text-center space-x-2">
+                              <button 
+                                onClick={() => { setSelectedStudent(s); setCurrentTab('buku-tabungan'); }}
+                                className="text-emerald-700 hover:bg-emerald-50 px-2 py-1 rounded"
+                              >
+                                Buku 📖
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteStudent(s.id)} 
+                                className="text-red-500 hover:bg-red-50 px-2 py-1 rounded"
+                              >
+                                Hapus 🗑
+                              </button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan="5" className="p-6 text-center text-slate-400">Tidak ada siswa yang cocok dengan pencarian atau filter.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ================= TAB 3: REKOD TRANSAKSI ================= */}
+            {currentTab === 'transaksi' && (
+              <div className="max-w-2xl mx-auto bg-white rounded-3xl border shadow-lg overflow-hidden no-print">
+                <div className="bg-slate-50 border-b px-6 py-4">
+                  <h3 className="font-extrabold text-slate-900 text-sm font-kids">Rekam Transaksi Setoran & Penarikan</h3>
+                  <p className="text-[10px] text-slate-400">Pastikan jumlah uang dan nama siswa sudah benar sebelum menyimpan data.</p>
+                </div>
+
+                <form onSubmit={handleAddTransaction} className="p-6 sm:p-8 space-y-6 text-xs">
+                  
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-600">Pilih Siswa</label>
+                    <select 
+                      name="studentId" 
+                      value={transactionForm.studentId}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, studentId: e.target.value }))}
+                      className="w-full px-3 py-2.5 border rounded-xl bg-white font-semibold"
+                    >
+                      {students.map(s => (
+                        <option key={s.id} value={s.id}>{s.nama} ({s.kelas} - Saldo: {formatRupiah(s.baki)})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-600">Jenis Transaksi</label>
+                      <select 
+                        name="jenis" 
+                        value={transactionForm.jenis}
+                        onChange={(e) => setTransactionForm(prev => ({ ...prev, jenis: e.target.value, nota: e.target.value === "Setoran" ? "Setoran tabungan" : "Penarikan tabungan" }))}
+                        className="w-full px-3 py-2.5 border rounded-xl bg-white"
+                      >
+                        <option value="Setoran">Setoran (Simpan Uang)</option>
+                        <option value="Penarikan">Penarikan (Ambil Uang)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-600">Jumlah Transaksi (Rupiah)</label>
+                      <input 
+                        type="number" 
+                        placeholder="Contoh: 50000" 
+                        name="jumlah"
+                        value={transactionForm.jumlah}
+                        onChange={(e) => setTransactionForm(prev => ({ ...prev, jumlah: e.target.value }))}
+                        className="w-full px-3 py-2.5 border rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-600">Catatan / Keterangan Transaksi</label>
+                    <input 
+                      type="text" 
+                      name="nota"
+                      value={transactionForm.nota}
+                      onChange={(e) => setTransactionForm(prev => ({ ...prev, nota: e.target.value }))}
+                      className="w-full px-3 py-2.5 border rounded-xl"
+                    />
+                  </div>
+
+                  <div className="pt-4 border-t flex justify-end gap-3">
+                    <button 
+                      type="submit" 
+                      className="bg-emerald-800 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md"
+                    >
+                      ✓ Simpan Transaksi Tabungan
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+            )}
+
+            {/* ================= TAB 4: SEJARAH ALIRAN ================= */}
+            {currentTab === 'riwayat' && (
+              <div className="space-y-6 no-print animate-fade-in-up">
+                
+                {/* Header Aliran & Eksport */}
+                <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">Log & Riwayat Transaksi Tabungan</h3>
+                    <p className="text-xs text-slate-500">Semua riwayat setoran dan penarikan harian disusun berdasarkan urutan waktu terbaru.</p>
+                  </div>
+                  <button 
+                    onClick={handleExportCSV}
+                    className="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Unduh Rekap (.csv)
+                  </button>
+                </div>
+
+                {/* Senarai Aliran Sejarah */}
+                <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto text-xs">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-bold text-[10px] uppercase border-b">
+                          <th className="p-4">Kode Transaksi</th>
+                          <th className="p-4">Nama Siswa</th>
+                          <th className="p-4">Tanggal</th>
+                          <th className="p-4">Jenis</th>
+                          <th className="p-4">Jumlah</th>
+                          <th className="p-4">Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {transactions.map(t => {
+                          const s = students.find(stud => stud.id === t.studentId) || {};
+                          return (
+                            <tr key={t.id} className="hover:bg-slate-50/40">
+                              <td className="p-4 font-mono text-[10px] text-slate-400">{t.id}</td>
+                              <td className="p-4">
+                                <strong className="text-slate-800 block">{s.nama || "Siswa Dihapus"}</strong>
+                                <span className="text-[10px] text-slate-400 block">{s.kelas || "-"}</span>
+                              </td>
+                              <td className="p-4">{t.tarikh}</td>
+                              <td className="p-4">
+                                <span className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] ${t.jenis === 'Setoran' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {t.jenis}
+                                </span>
+                              </td>
+                              <td className="p-4 font-bold text-slate-800">{formatRupiah(t.jumlah)}</td>
+                              <td className="p-4 text-slate-500 italic">{t.nota || "-"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ================= TAB 5: BUKU TABUNGAN (PASSBOOK) ================= */}
+            {currentTab === 'buku-tabungan' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                {/* Pilihan Murid (no-print) */}
+                <div className="lg:col-span-4 bg-white rounded-3xl border shadow-sm overflow-hidden no-print">
+                  <div className="p-4 border-b bg-slate-50">
+                    <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider text-emerald-800">Pilih Siswa</h4>
+                  </div>
+                  <div className="divide-y max-h-[500px] overflow-y-auto">
+                    {students.map(s => (
+                      <div 
+                        key={s.id}
+                        onClick={() => setSelectedStudent(s)}
+                        className={`p-4 cursor-pointer transition-all ${selectedStudent?.id === s.id ? 'bg-emerald-50 font-bold border-l-4 border-emerald-500' : 'hover:bg-slate-50 border-l-4 border-transparent'}`}
+                      >
+                        <span className="text-[10px] text-slate-400 block font-mono">{s.id}</span>
+                        <span className="text-xs block text-slate-900">{s.nama}</span>
+                        <span className="text-[10px] block text-emerald-700">{s.kelas} • {formatRupiah(s.baki)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Halaman Buku Tabungan Cetak */}
+                <div className="lg:col-span-8 space-y-4 print-area">
+                  {selectedStudent ? (
+                    <div className="space-y-4">
+                      
+                      {/* Butang Aksi (no-print) */}
+                      <div className="bg-white p-4 rounded-2xl border flex justify-between items-center no-print">
+                        <span className="text-xs text-slate-500">Halaman ini siap dicetak untuk dibagikan ke orang tua/siswa.</span>
+                        <button 
+                          onClick={() => window.print()}
+                          className="bg-emerald-800 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                          Cetak Lembar Tabungan
+                        </button>
+                      </div>
+
+                      {/* Buku Tabungan Rasmi */}
+                      <div className="bg-white p-8 md:p-12 rounded-3xl border shadow-lg space-y-6 print-area">
+                        
+                        {/* Kop Buku Tabungan */}
+                        <div className="border-b-4 border-double border-emerald-900 pb-5 text-center relative">
+                          <span className="text-[9px] font-extrabold text-emerald-800 uppercase tracking-widest block">Buku Catatan Tabungan Siswa</span>
+                          <h2 className="text-2xl font-black text-emerald-950 uppercase font-kids">MIS. Wadil Qura</h2>
+                          <p className="text-[10px] text-slate-500 font-semibold">Tahun Pelajaran 2026/2027 • Rekapitulasi Keuangan Siswa</p>
+                        </div>
+
+                        {/* Ringkasan Profil Murid */}
+                        <div className="grid grid-cols-2 gap-4 text-xs border-b pb-4">
+                          <div>
+                            <span className="text-slate-400 block">ID / Nama Siswa:</span>
+                            <strong className="text-slate-800 block">{selectedStudent.nama} ({selectedStudent.id})</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Tingkat Kelas:</span>
+                            <span className="font-semibold text-slate-700 block">{selectedStudent.kelas}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Total Saldo Terkini:</span>
+                            <strong className="text-base text-emerald-700 block">{formatRupiah(selectedStudent.baki)}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Status Rekening:</span>
+                            <span className="font-bold text-green-700 block">Aktif</span>
+                          </div>
+                        </div>
+
+                        {/* Jadual Sejarah Transaksi Murid Terpilih */}
+                        <div className="space-y-3 min-h-[300px]">
+                          <span className="font-bold text-[10px] text-emerald-800 uppercase tracking-wider block">Riwayat Transaksi (Mutasi)</span>
+                          <table className="w-full text-left text-xs border">
+                            <thead>
+                              <tr className="bg-slate-50 border-b text-[10px] font-bold text-slate-500 uppercase">
+                                <th className="p-3 border-r">Tanggal</th>
+                                <th className="p-3 border-r">Transaksi</th>
+                                <th className="p-3 text-right border-r">Setoran (Masuk)</th>
+                                <th className="p-3 text-right border-r">Penarikan (Keluar)</th>
+                                <th className="p-3">Keterangan</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {transactions.filter(t => t.studentId === selectedStudent.id).length > 0 ? (
+                                transactions.filter(t => t.studentId === selectedStudent.id).map(t => (
+                                  <tr key={t.id}>
+                                    <td className="p-3 font-mono text-[11px] border-r">{t.tarikh}</td>
+                                    <td className="p-3 font-semibold border-r">{t.jenis}</td>
+                                    <td className="p-3 text-right font-semibold text-green-700 border-r">{t.jenis === 'Setoran' ? formatRupiah(t.jumlah) : "-"}</td>
+                                    <td className="p-3 text-right font-semibold text-red-600 border-r">{t.jenis === 'Penarikan' ? formatRupiah(t.jumlah) : "-"}</td>
+                                    <td className="p-3 text-slate-500 italic">{t.nota || "-"}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={5} className="p-6 text-center text-slate-400">Belum ada riwayat transaksi untuk siswa ini.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pengesahan */}
+                        <div className="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+                          <div className="space-y-14">
+                            <span>Mengetahui,<br /><strong>Orang Tua / Wali Siswa</strong></span>
+                            <span className="block border-t border-slate-400 w-2/3 mx-auto pt-1 font-bold">Tanda Tangan Wali</span>
+                          </div>
+                          <div className="space-y-14">
+                            <span>Jakarta, 2 Juli 2026<br /><strong>Bendahara MIS. Wadil Qura</strong></span>
+                            <span className="block border-t border-slate-400 w-2/3 mx-auto pt-1 font-bold">Ustadzah / Staf Keuangan</span>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-center text-xs text-slate-400 p-12">Pilih nama siswa di daftar sebelah kiri.</p>
+                  )}
+                </div>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* KAKI PORTAL (no-print) */}
+          <footer className="bg-slate-900 text-slate-400 text-center py-6 text-xs border-t border-slate-800 no-print">
+            <p>Aplikasi Database Tabungan Siswa MIS. Wadil Qura © 2026/2027. Hak Cipta Dilindungi.</p>
+          </footer>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
